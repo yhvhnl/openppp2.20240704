@@ -6,7 +6,7 @@ namespace ppp
 {
     namespace diagnostics
     {
-#if !defined(_ANDROID)
+#if !defined(_ANDROID) && !defined(__MUSL__)
         std::string                         CaptureStackTrace(int skip = 0) noexcept;
 #endif
 
