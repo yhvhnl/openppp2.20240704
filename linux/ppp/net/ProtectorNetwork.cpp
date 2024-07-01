@@ -31,7 +31,12 @@
 #include <err.h>
 #include <poll.h>
 #else
+#if defined(_MACOS)
+#include <errno.h>
+#elif defined(_LINUX)
 #include <error.h>
+#endif
+
 #include <sys/poll.h>
 #endif
 #endif
