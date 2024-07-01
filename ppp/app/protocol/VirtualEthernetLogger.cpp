@@ -1,4 +1,3 @@
-#define _LARGEFILE64_SOURCE
 #include <ppp/app/protocol/VirtualEthernetLogger.h>
 #include <ppp/DateTime.h>
 #include <ppp/io/File.h>
@@ -9,14 +8,21 @@
 #include <ppp/transmissions/ITransmission.h>
 #include <ppp/transmissions/IWebsocketTransmission.h>
 
+#if !defined(_WIN32)
+#include <common/unix/UnixAfx.h>
+#endif
+
 namespace ppp {
     namespace app {
         namespace protocol {
             VirtualEthernetLogger::VirtualEthernetLogger(const std::shared_ptr<boost::asio::io_context>& context, const ppp::string& log_path) noexcept
                 : log_file_(NULL)
                 , log_context_(context) {
+
                 if (NULL != context && log_path.size() > 0) {
-                    ppp::string file_path = ppp::io::File::GetFullPath(ppp::io::File::RewritePath(log_path.data()).data());
+                    ppp::string file_path = ppp::io::File::RewritePath(log_path.data());
+                    file_path = ppp::io::File::GetFullPath(file_path.data());
+
                     ppp::string file_dirs = ppp::io::File::GetParentPath(file_path.data());
                     if (file_dirs.size() > 0) {
                         if (ppp::io::File::CreateDirectories(file_dirs.data())) {
@@ -27,19 +33,7 @@ namespace ppp {
 #else
                                 int fd = open(file_path.data(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
                                 if (fd != -1) {
-#if defined(_MACOS)
-                                    // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/lseek.2.html
-                                    bool seek64 = lseek(fd, 0, SEEK_END) != -1;
-#else
-                                    // https://android.googlesource.com/platform/bionic/+/b23f193/libc/unistd/lseek64.c
-                                    bool seek64 = lseek64(fd, 0, SEEK_END) != -1;
-                                    if (!seek64) {
-                                        seek64 = lseek(fd, 0, SEEK_END) != -1;
-                                        if (!seek64) {
-                                            close(fd);
-                                        }
-                                    }
-#endif
+                                    bool seek64 = ppp::unix__::UnixAfx::Lseek2(fd, 0, SEEK_END);
                                     if (seek64) {
                                         auto log_file = make_shared_object<boost::asio::posix::stream_descriptor>(*context, fd);;
                                         if (NULL == log_file) {
@@ -48,6 +42,9 @@ namespace ppp {
                                         else {
                                             log_file_ = std::move(log_file);
                                         }
+                                    }
+                                    else {
+                                        close(fd);
                                     }
                                 }
 #endif

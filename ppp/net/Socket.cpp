@@ -23,7 +23,6 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <poll.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -37,10 +36,12 @@
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/threading/Executors.h>
 
-#if defined(_MACOS)
-#include <errno.h>
-#elif defined(_LINUX)
+#if defined(__MUSL__)
 #include <err.h>
+#include <poll.h>
+#else
+#include <error.h>
+#include <sys/poll.h>
 #endif
 
 // https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/ip.h#L26

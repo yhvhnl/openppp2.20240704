@@ -704,7 +704,9 @@ namespace ppp {
 
     const char* GetDefaultCipherSuites() noexcept {
 #if defined(__arm__) || defined(__aarch64__)
-        if (sizeof(void*) < 8) {
+        static constexpr int pointer_size = sizeof(void*);
+
+        if (pointer_size < 8) {
             return "TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384";
         }
 #endif
@@ -718,7 +720,7 @@ namespace ppp {
     }
 
     std::string CaptureStackTrace() noexcept {
-#if defined(_LINUX) && !defined(_ANDROID)
+#if defined(_LINUX) && !defined(_ANDROID) && !defined(__MUSL__)
         if (ppp::diagnostics::Addr2lineIsSupport()) {
             return ppp::diagnostics::CaptureStackTrace();
         }

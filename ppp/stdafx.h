@@ -117,6 +117,18 @@
 #endif
 #endif
 
+#if defined(__MUSL__)
+#if !defined(__musl__)
+#define __musl__ 1
+#endif
+#endif
+
+#if defined(__musl__)
+#if !defined(__MUSL__)
+#define __MUSL__ 1
+#endif
+#endif
+
 #if ((defined(__IPHONE_OS_VERSION_MIN_REQUIRED)) || (defined(__APPLE__) && defined(__MACH__) && defined(TARGET_OS_IOS)))
 #if !defined(_IPHONE)
 #define _IPHONE 1

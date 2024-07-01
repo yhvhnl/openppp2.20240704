@@ -38,6 +38,8 @@ namespace ppp
 
         public:
             static bool                                                         CloseHandle(const void* handle) noexcept;
+            static int64_t                                                      Lseek(int fd, int64_t offset, int whence) noexcept;
+            static bool                                                         Lseek2(int fd, int64_t offset, int whence) noexcept { return Lseek(fd, offset, whence) != -1; }
         };
     }
 }

@@ -468,5 +468,39 @@ namespace ppp {
 #endif
             return true;
         }
+
+        int64_t UnixAfx::Lseek(int fd, int64_t offset, int whence) noexcept {
+            if (fd == -1) {
+                return -1;
+            }
+
+            whence = std::max<int>(whence, SEEK_SET);
+
+#if defined(__USE_GNU)
+#if defined(SEEK_HOLE)
+            whence = std::min<int>(whence, SEEK_HOLE);
+#elif defined(SEEK_DATA)
+            whence = std::min<int>(whence, SEEK_DATA);
+#else
+            whence = std::min<int>(whence, SEEK_END);
+#endif
+#else
+            whence = std::min<int>(whence, SEEK_END);
+#endif
+
+#if defined(_MACOS)
+            // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/lseek.2.html
+            return lseek(fd, offset, whence);
+#else
+#if defined(_LARGEFILE64_SOURCE)
+            // https://android.googlesource.com/platform/bionic/+/b23f193/libc/unistd/lseek64.c
+            int64_t r = lseek64(fd, offset, whence);
+            if (r != -1) {
+                return r;
+            }
+#endif
+            return lseek(fd, offset, whence);
+#endif
+        }
     }
 }

@@ -6,7 +6,7 @@
 #include <cxxabi.h>
 #include <sys/resource.h>
 
-#if (BACKWARD_HAS_BACKTRACE == 1) || (BACKWARD_HAS_BACKTRACE_SYMBOL == 1) 
+#if !defined(_ANDROID) && !defined(__MUSL__)
 #include <execinfo.h>
 #endif
 
@@ -17,13 +17,6 @@ namespace ppp
 {
     namespace diagnostics
     {
-        static ppp::string GetExecutablePath() noexcept
-        {
-            char path[8192];
-            ssize_t count = readlink("/proc/self/exe", path, sizeof(path));
-            return ppp::string(path, count > 0 ? count : 0);
-        }
-
         bool Addr2lineIsSupport() noexcept
         {
             static bool supported = Addr2lineIsSupportIf();
@@ -36,7 +29,7 @@ namespace ppp
             return status == 0; /* sudo apt-get remove binutils */
         }
 
-#if (BACKWARD_HAS_BACKTRACE == 1) || (BACKWARD_HAS_BACKTRACE_SYMBOL == 1)
+#if !defined(_ANDROID) && !defined(__MUSL__) 
         static ppp::string ExtractSymbol(const char* symbol)
         {
             if (NULL == symbol || *symbol == '\x0')
@@ -91,7 +84,7 @@ namespace ppp
             ppp::string stacktraces = "Stack Trace:";
             if (NULL != stackframe_symbols)
             {
-                ppp::string executable_path = GetExecutablePath();
+                ppp::string executable_path = GetFullExecutionFilePath();
                 ppp::string default_line = "\r\n  at ";
                 for (int i = skip; i < stackframe_size; i++)
                 {

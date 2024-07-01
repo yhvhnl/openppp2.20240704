@@ -26,8 +26,14 @@
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <netinet/tcp.h>
+
+#if defined(__MUSL__)
 #include <err.h>
 #include <poll.h>
+#else
+#include <error.h>
+#include <sys/poll.h>
+#endif
 #endif
 
 #include <fcntl.h>

@@ -15,6 +15,15 @@ SET(CMAKE_CXX_FLAGS "-fPIC -fvisibility=hidden -Wno-format -Wno-inconsistent-mis
 ADD_DEFINITIONS(-DJEMALLOC)
 ADD_DEFINITIONS(-DBUDDY_ALLOC_IMPLEMENTATION)
 
+# When compiling with the musl-libc standard library, 
+# You need to define the _MUSL__ preprocessor macro to ensure correct compilation.
+# https://wiki.musl-libc.org/faq
+# ADD_DEFINITIONS(-D__MUSL__) 
+
+# When using the musl-libc standard library, the _LARGEFILE64_SOURCE macro is not defined by default on some platforms. 
+# If 64-bit functions extended by _LARGEFILE64_SOURCE, such as lseek64, are required, it needs to be explicitly defined.
+# ADD_DEFINITIONS(-D_LARGEFILE64_SOURCE)
+
 # ENV.
 SET(PLATFORM_DEBUG FALSE)
 IF(CMAKE_BUILD_TYPE STREQUAL "Debug" OR BT MATCHES "Debug")
