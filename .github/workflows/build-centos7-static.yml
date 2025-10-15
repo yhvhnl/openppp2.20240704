@@ -1,4 +1,5 @@
-name: Build openppp2 on CentOS 7
+# .github/workflows/build-centos7-static.yml
+name: Build openppp2 CentOS7 Static
 
 on:
   push:
@@ -9,52 +10,70 @@ on:
       - main
 
 jobs:
-  build-centos7:
+  build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Setup CentOS 7 environment
+    - name: Set up CentOS 7 environment
       run: |
-        sudo apt-get update -y
+        sudo apt-get update
         sudo apt-get install -y debootstrap schroot
 
-        # 创建一个 CentOS 7 chroot 环境
-        sudo debootstrap --arch=amd64 --variant=minbase centos7 ./centos7-root http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
+        # 创建 CentOS7 rootfs
+        sudo debootstrap --arch=amd64 centos7 /srv/chroots/centos7 http://mirror.centos.org/centos/7/os/x86_64/
 
-    - name: Build inside CentOS 7 chroot
+        # 创建 schroot 配置
+        echo "[centos7]" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
+        echo "description=CentOS 7 chroot" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
+        echo "directory=/srv/chroots/centos7" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
+        echo "users=$(whoami)" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
+        echo "root-users=$(whoami)" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
+        echo "type=directory" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
+
+        # 导入你的 repo
+        sudo rm -f /srv/chroots/centos7/etc/yum.repos.d/*.repo
+        sudo wget -O /srv/chroots/centos7/etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
+
+        # 清缓存
+        sudo schroot -c centos7 -- yum clean all
+        sudo schroot -c centos7 -- yum makecache
+
+        # 安装依赖
+        sudo schroot -c centos7 -- yum -y install wget gcc gcc-c++ make cmake git unzip bzip2 perl
+
+    - name: Build Boost 1.66
       run: |
-        sudo chroot ./centos7-root /bin/bash -c "
-        yum clean all
-        yum install -y wget tar gzip bzip2 gcc gcc-c++ make cmake perl openssl-devel zlib-devel
-
-        # 下载 Boost 1.66
-        wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2 -O boost_1_66_0.tar.bz2
-        tar jxvf boost_1_66_0.tar.bz2
-        cd boost_1_66_0
-        ./bootstrap.sh
-        ./b2 cxxflags=-fPIC link=static threading=multi install --prefix=/usr/local/boost_1_66_0
-        cd ..
-
-        # 克隆 openppp2
-        git clone https://github.com/yhvhnl/openppp2.20240704 openppp2
-        cd openppp2
-
-        # 创建构建目录
-        mkdir -p build && cd build
-
-        # 使用 cmake 构建
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=/usr/local/boost_1_66_0
-        make -j\$(nproc)
-
-        # 打包二进制
-        mkdir -p /workspace/output
-        cp -r bin /workspace/output/
+        sudo schroot -c centos7 -- bash -c "
+          cd /workspace
+          wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
+          tar jxvf boost_1_66_0.tar.bz2
+          cd boost_1_66_0
+          ./bootstrap.sh --prefix=/usr/local
+          ./b2 install
         "
 
-    - name: Upload build artifacts
+    - name: Build openppp2
+      run: |
+        sudo schroot -c centos7 -- bash -c "
+          cd /workspace
+          mkdir -p openppp2/build
+          cd openppp2/build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j\$(nproc)
+          mkdir -p ../bin
+          cp ppp ../bin/
+        "
+
+    - name: Package openppp2
+      run: |
+        cd openppp2/bin
+        zip -r openppp2-centos7-amd64.zip ppp
+      shell: bash
+
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: openppp2-centos7
-        path: output/
+        path: openppp2/bin/openppp2-centos7-amd64.zip
