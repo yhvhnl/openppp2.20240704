@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout workflow 文件所在仓库（用于 Docker volume）
+      # 1️⃣ Checkout 仓库
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -30,7 +30,7 @@ jobs:
             yum clean all
             yum makecache
 
-            # 安装具体开发工具和依赖
+            # 安装基础工具和依赖
             yum install -y \
               gcc \
               gcc-c++ \
@@ -38,7 +38,6 @@ jobs:
               autoconf \
               automake \
               libtool \
-              cmake \
               wget \
               bzip2 \
               bzip2-devel \
@@ -53,6 +52,11 @@ jobs:
               libunwind \
               libunwind-devel \
               git
+
+            # 安装新版 CMake
+            wget https://github.com/Kitware/CMake/releases/download/v3.27.8/cmake-3.27.8-linux-x86_64.sh
+            sh cmake-3.27.8-linux-x86_64.sh --skip-license --prefix=/usr/local
+            export PATH=/usr/local/bin:$PATH
 
             # 获取 CPU 核心数
             ncpu=\$(nproc)
