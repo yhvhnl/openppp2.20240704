@@ -21,16 +21,14 @@ jobs:
           docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
             set -e
 
-            # 备份原 repo 并替换为自定义 repo
+            # 替换 repo 为自定义源
             mkdir -p /root/backup-repos
             mv /etc/yum.repos.d/* /root/backup-repos/
             curl -o /etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
-
-            # 清理缓存并生成缓存
             yum clean all
             yum makecache
 
-            # 安装基础工具和依赖（不安装 boost-devel）
+            # 安装基础工具和依赖
             yum install -y \
               gcc \
               gcc-c++ \
@@ -57,16 +55,16 @@ jobs:
             sh cmake-3.27.8-linux-x86_64.sh --skip-license --prefix=/usr/local
             export PATH=/usr/local/bin:$PATH
 
-            # 获取 CPU 核心数
+            # CPU 核心数
             ncpu=\$(nproc)
 
-            # Clone openppp2 仓库
+            # Clone openppp2
             git clone https://github.com/yhvhnl/openppp2.20240704.git openppp2
 
             # -----------------------
-            # 编译 Boost 1.84 源码（支持 Beast），加 -L 跟随跳转
-            wget -L https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.bz2
-            tar jxvf boost_1_84_0.tar.bz2
+            # 下载并编译 Boost 1.84 (官方 GitHub release tar.gz)
+            wget -O boost_1_84_0.tar.gz https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost_1_84_0.tar.gz
+            tar zxvf boost_1_84_0.tar.gz
             cd boost_1_84_0
             ./bootstrap.sh
             ./b2 cxxflags=-fPIC --prefix=/usr/local
@@ -74,7 +72,7 @@ jobs:
             cd ..
 
             # -----------------------
-            # 构建 jemalloc 静态库
+            # 构建 jemalloc
             wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
             tar jxvf jemalloc-5.3.0.tar.bz2
             cd jemalloc-5.3.0
@@ -84,6 +82,7 @@ jobs:
             make install
             cd ..
 
+            # -----------------------
             # 构建 OpenSSL 静态库
             wget https://www.openssl.org/source/openssl-3.0.13.tar.gz
             tar zxvf openssl-3.0.13.tar.gz
@@ -93,7 +92,8 @@ jobs:
             make install
             cd ..
 
-            # 构建 openppp2 静态二进制
+            # -----------------------
+            # 编译 openppp2 静态二进制
             mkdir -p openppp2/build
             cd openppp2/build
             cmake .. \
@@ -104,6 +104,7 @@ jobs:
               -DBOOST_ROOT=/usr/local
             make -j \$ncpu
 
+            # -----------------------
             # 打包二进制
             cd ../bin
             mkdir -p openppp2
