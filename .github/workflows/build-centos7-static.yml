@@ -1,4 +1,4 @@
-name: Build openppp2 on CentOS 7 (Static)
+name: Build OpenPPP2 on CentOS7
 
 on:
   push:
@@ -10,74 +10,61 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # GitHub Actions 需要在 runner 上运行 Docker
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up workspace
-      run: mkdir -p $GITHUB_WORKSPACE/build
+      - name: Run CentOS7 Docker build
+        run: |
+          docker run --rm -v $GITHUB_WORKSPACE:/workspace -w /workspace centos:7 /bin/bash -c "
+          set -e
 
-    - name: Pull CentOS 7 Docker image
-      run: docker pull centos:7
+          # 替换 repo 为你的源
+          mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak
+          wget -O /etc/yum.repos.d/CentOS-Base.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
+          yum clean all
+          yum makecache
 
-    - name: Build inside CentOS 7 container
-      run: |
-        docker run --rm -v $GITHUB_WORKSPACE:/workspace -w /workspace centos:7 /bin/bash -c "
-        set -e
+          # 安装基础开发工具和依赖
+          yum install -y wget curl git tar zip unzip gcc gcc-c++ make cmake openssl-devel libicu-devel libunwind-devel lrzsz bzip2
 
-        # 使用自定义 repo
-        mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak
-        wget -O /etc/yum.repos.d/CentOS-Base.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
-        yum clean all
-        yum makecache
+          # 设置 CPU 核心数
+          export ncpu=$(nproc)
 
-        # 安装编译工具和依赖
-        yum install -y gcc gcc-c++ make cmake wget tar bzip2 zip unzip curl git \
-                       openssl-devel libicu-devel libunwind-devel lrzsz
+          # 下载并编译 Boost 1.66（或低于1.70）
+          wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.gz
+          tar zxvf boost_1_66_0.tar.gz
+          cd boost_1_66_0
+          ./bootstrap.sh
+          ./b2 cxxflags=-fPIC link=static threading=multi runtime-link=static -j $ncpu
+          ./b2 install
+          cd ..
 
-        # 下载并构建 Boost 1.66 静态库
-        wget -O boost_1_66_0.tar.bz2 https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
-        tar jxvf boost_1_66_0.tar.bz2
-        cd boost_1_66_0
-        ./bootstrap.sh --with-libraries=system,thread,chrono,date_time,regex,filesystem,program_options,atomic,random,regex,serialization,graph,beast
-        ./b2 cxxflags=-fPIC link=static runtime-link=static threading=multi -j$(nproc)
-        ./b2 install --prefix=/usr/local/boost_1_66
-        cd ..
+          # 下载 OpenSSL 并安装
+          wget https://www.openssl.org/source/openssl-1.1.1u.tar.gz
+          tar zxvf openssl-1.1.1u.tar.gz
+          cd openssl-1.1.1u
+          ./Configure linux-x86_64 no-shared --prefix=/usr/local/ssl
+          make -j $ncpu
+          make install
+          export PATH=/usr/local/ssl/bin:$PATH
+          cd ..
 
-        # 下载并构建 OpenSSL 静态库
-        wget https://www.openssl.org/source/openssl-1.1.1v.tar.gz
-        tar zxvf openssl-1.1.1v.tar.gz
-        cd openssl-1.1.1v
-        ./config --prefix=/usr/local/openssl no-shared
-        make -j$(nproc)
-        make install
-        cd ..
+          # 编译 openppp2
+          mkdir -p openppp2/build
+          cd openppp2/build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=/usr/local/include/boost -DOPENSSL_ROOT_DIR=/usr/local/ssl
+          make -j $ncpu
 
-        # 构建 openppp2
-        git clone https://github.com/yhvhnl/openppp2.20240704 openppp2
-        cd openppp2
-        mkdir -p build
-        cd build
-
-        # 静态链接 OpenSSL 和 Boost
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DBOOST_ROOT=/usr/local/boost_1_66 \
-          -DOPENSSL_ROOT_DIR=/usr/local/openssl \
-          -DOPENSSL_USE_STATIC_LIBS=TRUE \
-          -DBUILD_SHARED_LIBS=OFF
-
-        make -j$(nproc)
-
-        # 打包生成二进制
-        cd ../bin
-        zip -r openppp2-centos7-amd64-static.zip *
-        mv openppp2-centos7-amd64-static.zip /workspace/
-        "
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: openppp2-centos7-amd64-static
-        path: openppp2-centos7-amd64-static.zip
+          # 打包结果
+          cd ../bin
+          zip -r openppp2-centos7-amd64.zip ppp
+          mv openppp2-centos7-amd64.zip /workspace/
+          "
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: openppp2-centos7
+          path: openppp2-centos7-amd64.zip
