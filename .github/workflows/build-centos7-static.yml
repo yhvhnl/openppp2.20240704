@@ -19,10 +19,12 @@ jobs:
       - name: Build openppp2 static binary in CentOS 7
         run: |
           docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
-            # 替换 yum 源为你提供的 repo
+            # 备份原 repo 并替换为自定义 repo
+            mkdir -p /root/backup-repos
+            mv /etc/yum.repos.d/* /root/backup-repos/
             curl -o /etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
 
-            # 清理缓存
+            # 清理缓存并生成缓存
             yum clean all
             yum makecache
 
@@ -62,7 +64,7 @@ jobs:
               -DOPENSSL_USE_STATIC_LIBS=TRUE
             make -j \$ncpu
 
-            # 打包成单个 tar.gz
+            # 打包成 tar.gz
             cd ../bin
             tar -czvf openppp2-centos7-amd64-static.tar.gz openppp2
           "
