@@ -1,76 +1,64 @@
-name: Build openppp2 for CentOS 7 (Static)
+name: Build openppp2 for CentOS 7 (Repo-only)
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  build:
+  build-centos7:
     runs-on: ubuntu-latest
-    env:
-      NCPU: ${{ runner.os == 'Linux' && runner.arch == 'X64' && runner.job }} 
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y software-properties-common wget tar bzip2 make cmake perl python3 unzip
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap schroot wget tar unzip curl build-essential
 
-    - name: Install GCC 4.8
-      run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
-        sudo apt-get update -y
-        sudo apt-get install -y gcc-4.8 g++-4.8
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
-        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
-        gcc --version
-        g++ --version
+      - name: Create CentOS 7 chroot
+        run: |
+          mkdir -p /tmp/centos7
+          sudo debootstrap --arch=amd64 centos7 /tmp/centos7 http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
 
-    - name: Build Boost 1.66 (static)
-      run: |
-        wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
-        tar jxvf boost_1_66_0.tar.bz2
-        cd boost_1_66_0
-        ./bootstrap.sh --with-libraries=system,thread,chrono,regex,filesystem,program_options,graph,atomic,date_time
-        ./b2 toolset=gcc cxxflags="-fPIC -O2" link=static threading=multi runtime-link=static stage
-        cd ..
+      - name: Configure repo inside chroot
+        run: |
+          sudo cp /tmp/centos7/etc/yum.repos.d/CentOS-Base.repo /tmp/centos7/etc/yum.repos.d/CentOS-Base.repo.bak
+          echo "[custom-base]
+          name=Custom CentOS 7 Base
+          baseurl=http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
+          enabled=1
+          gpgcheck=0" | sudo tee /tmp/centos7/etc/yum.repos.d/custom.repo
 
-    - name: Build OpenSSL 1.1.1 (static)
-      run: |
-        wget https://www.openssl.org/source/openssl-1.1.1q.tar.gz
-        tar zxvf openssl-1.1.1q.tar.gz
-        cd openssl-1.1.1q
-        ./config no-shared --prefix=$HOME/openssl
-        make -j$(nproc)
-        make install
-        cd ..
+      - name: Install build dependencies inside chroot
+        run: |
+          sudo chroot /tmp/centos7 /bin/bash -c "
+            yum clean all
+            yum -y groupinstall 'Development Tools'
+            yum -y install cmake make gcc gcc-c++ wget unzip tar bzip2 perl zlib-devel openssl-devel boost-devel
+          "
 
-    - name: Build openppp2
-      run: |
-        cd openppp2
-        mkdir -p build && cd build
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DBOOST_ROOT=$GITHUB_WORKSPACE/boost_1_66_0 \
-          -DOPENSSL_ROOT_DIR=$HOME/openssl \
-          -DBUILD_SHARED_LIBS=OFF
-        make -j$(nproc)
-        cd ..
+      - name: Build openppp2 inside chroot
+        run: |
+          sudo chroot /tmp/centos7 /bin/bash -c "
+            cd /workspace/openppp2
+            mkdir -p build
+            cd build
+            cmake .. -DCMAKE_BUILD_TYPE=Release
+            make -j$(nproc)
+          "
 
-    - name: Package binary
-      run: |
-        mkdir -p output
-        cp openppp2/build/ppp output/
-        cd output
-        zip -r openppp2-centos7-static.zip ppp
+      - name: Package binary
+        run: |
+          cd openppp2/build
+          zip -r openppp2-centos7.zip ppp
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: openppp2-centos7-static
-        path: output/openppp2-centos7-static.zip
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openppp2-centos7
+          path: openppp2/build/openppp2-centos7.zip
