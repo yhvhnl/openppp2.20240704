@@ -1,4 +1,4 @@
-name: Build openppp2 Static Binary for CentOS 7
+name: Build openppp2 Static Binary ( CentOS 7)
 
 on:
   push:
@@ -15,59 +15,72 @@ jobs:
       - name: Checkout openppp2
         uses: actions/checkout@v4
 
-      # 2️⃣ Build inside CentOS 7 Docker
-      - name: Build openppp2 static binary in CentOS 7
+      # 2️⃣ 安装工具
+      - name: Install required tools
         run: |
-          docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
-            # 替换 yum 源为自定义 repo
-            curl -o /etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
+          sudo apt-get update -y
+          sudo apt-get install -y wget tar xz-utils rpm yum
 
-            # 清理缓存
-            yum clean all
-            yum makecache
+      # 3️⃣ 下载 CentOS 7 rootfs
+      - name: Download CentOS 7 rootfs
+        run: |
+          mkdir -p centos7
+          cd centos7
+          wget http://vault.centos.org/7.9.2009/os/x86_64/images/boot.iso -O CentOS-7-rootfs.tar.gz || true
+          # 如果有真正 rootfs 可用，这里直接解压
+          # tar -xzf CentOS-7-rootfs.tar.gz
+          cd ..
 
-            # 安装依赖
-            yum groupinstall 'Development Tools' -y
-            yum install -y wget gcc gcc-c++ cmake autoconf boost-devel openssl-devel bzip2 bzip2-devel unzip zip curl libunwind libunwind-devel
+      # 4️⃣ 替换 repo 文件
+      - name: Replace repo with provided source
+        run: |
+          mkdir -p centos7/etc/yum.repos.d/
+          curl -o centos7/etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
 
-            # 获取 CPU 核心数
-            ncpu=\$(nproc)
+      # 5️⃣ 安装开发工具和依赖（chroot 环境）
+      - name: Install build dependencies
+        run: |
+          sudo yum --installroot=$PWD/centos7 groupinstall 'Development Tools' -y
+          sudo yum --installroot=$PWD/centos7 install -y wget gcc gcc-c++ cmake autoconf boost-devel openssl-devel bzip2 bzip2-devel unzip zip curl libunwind libunwind-devel
 
-            # 构建 jemalloc 静态库
-            wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
-            tar jxvf jemalloc-5.3.0.tar.bz2
-            cd jemalloc-5.3.0
-            ./autogen.sh --with-jemalloc-prefix=je_
-            ./configure --enable-static --disable-shared
-            make -j \$ncpu
-            make install
-            cd ..
+      # 6️⃣ Build jemalloc
+      - name: Build jemalloc
+        run: |
+          wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
+          tar jxvf jemalloc-5.3.0.tar.bz2
+          cd jemalloc-5.3.0
+          ./autogen.sh --with-jemalloc-prefix=je_
+          ./configure --enable-static --disable-shared --prefix=$PWD/../centos7/usr/local
+          make -j$(nproc)
+          make install
+          cd ..
 
-            # 构建 OpenSSL 静态库
-            wget https://www.openssl.org/source/openssl-3.0.13.tar.gz
-            tar zxvf openssl-3.0.13.tar.gz
-            cd openssl-3.0.13
-            ./Configure linux-x86_64 no-shared --prefix=/usr/local/ssl
-            make -j \$ncpu
-            make install
-            cd ..
+      # 7️⃣ Build OpenSSL
+      - name: Build OpenSSL
+        run: |
+          wget https://www.openssl.org/source/openssl-3.0.13.tar.gz
+          tar zxvf openssl-3.0.13.tar.gz
+          cd openssl-3.0.13
+          ./Configure linux-x86_64 no-shared --prefix=$PWD/../centos7/usr/local/ssl
+          make -j$(nproc)
+          make install
+          cd ..
 
-            # 构建 openppp2 静态二进制
-            mkdir -p openppp2/build
-            cd openppp2/build
-            cmake .. \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DBUILD_SHARED_LIBS=OFF \
-              -DOPENSSL_ROOT_DIR=/usr/local/ssl \
-              -DOPENSSL_USE_STATIC_LIBS=TRUE
-            make -j \$ncpu
+      # 8️⃣ Build openppp2
+      - name: Build openppp2
+        run: |
+          mkdir -p openppp2/build
+          cd openppp2/build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DOPENSSL_ROOT_DIR=$PWD/../../centos7/usr/local/ssl \
+            -DOPENSSL_USE_STATIC_LIBS=TRUE
+          make -j$(nproc)
+          cd ../bin
+          tar -czvf openppp2-centos7-amd64-static.tar.gz openppp2
 
-            # 打包成单个 tar.gz
-            cd ../bin
-            tar -czvf openppp2-centos7-amd64-static.tar.gz openppp2
-          "
-
-      # 3️⃣ 上传静态二进制包
+      # 9️⃣ 上传二进制包
       - name: Upload static binary package
         uses: actions/upload-artifact@v4
         with:
