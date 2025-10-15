@@ -62,8 +62,8 @@ jobs:
             git clone https://github.com/yhvhnl/openppp2.20240704.git openppp2
 
             # -----------------------
-            # 下载并编译 Boost 1.84 (官方 GitHub release tar.gz)
-            wget -O boost_1_84_0.tar.gz https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost_1_84_0.tar.gz
+            # 下载并编译 Boost 1.84 (SourceForge 官方 tar.gz)
+            wget -O boost_1_84_0.tar.gz https://sourceforge.net/projects/boost/files/boost/1.84.0/boost_1_84_0.tar.gz/download
             tar zxvf boost_1_84_0.tar.gz
             cd boost_1_84_0
             ./bootstrap.sh
