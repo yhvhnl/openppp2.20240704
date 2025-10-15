@@ -1,29 +1,33 @@
-name: Build openppp2 for CentOS7 (static)
+name: Build openppp2 CentOS7 Static
 
+# 触发事件
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Build openppp2 Static
     runs-on: ubuntu-latest
     env:
       NCPU: ${{ runner.processor_count }}
-      OPENPPP2_VERSION: "20240704"
+      OPENPPP2_VERSION: "20241015"
 
     steps:
-    - name: Checkout code
+    # 1. 检出代码
+    - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install build dependencies
+    # 2. 安装依赖
+    - name: Install build tools and dependencies
       run: |
         sudo apt-get update -y
         sudo apt-get install -y build-essential g++ gcc make cmake wget unzip zip \
         libssl-dev zlib1g-dev libicu-dev curl autoconf
 
-    - name: Download Boost 1.66
+    # 3. 下载 Boost 1.66 并编译
+    - name: Download and build Boost 1.66
       run: |
         wget -O boost_1_66_0.tar.bz2 https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
         tar jxvf boost_1_66_0.tar.bz2
@@ -33,7 +37,8 @@ jobs:
         ./b2 cxxflags=-fPIC -j$NCPU
         cd ..
 
-    - name: Download OpenSSL 1.1.1
+    # 4. 下载 OpenSSL 1.1.1 并静态编译
+    - name: Download and build OpenSSL 1.1.1
       run: |
         wget -O openssl-1.1.1u.tar.gz https://www.openssl.org/source/openssl-1.1.1u.tar.gz
         tar zxvf openssl-1.1.1u.tar.gz
@@ -44,6 +49,7 @@ jobs:
         make install_sw
         cd ..
 
+    # 5. 编译 openppp2
     - name: Build openppp2
       run: |
         cd openppp2
@@ -56,14 +62,16 @@ jobs:
           -DBUILD_SHARED_LIBS=OFF \
           -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         make -j$NCPU
-        cd ..
+        cd ../..
 
-    - name: Package binary
+    # 6. 打包静态二进制
+    - name: Package openppp2 binary
       run: |
         BIN_NAME=openppp2-centos7-static-${{ env.OPENPPP2_VERSION }}.zip
         zip -r $BIN_NAME openppp2/build/ppp
         echo "BIN_NAME=$BIN_NAME" >> $GITHUB_ENV
 
+    # 7. 上传 artifact
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
