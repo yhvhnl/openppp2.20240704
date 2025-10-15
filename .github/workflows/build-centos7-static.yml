@@ -12,17 +12,19 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Run build in CentOS 7
       run: |
         docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
+          set -e
+
           # 更新基础工具和依赖
           yum install -y epel-release
           yum install -y gcc gcc-c++ make cmake wget tar bzip2 zip unzip curl git \
                          openssl-devel libicu-devel libunwind-devel lrzsz
 
-          # 下载并编译 Boost 1.66
+          # 下载并安装 Boost 1.66
           wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
           tar jxvf boost_1_66_0.tar.bz2
           cd boost_1_66_0
@@ -48,7 +50,7 @@ jobs:
         "
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: openppp2-centos7-amd64
         path: openppp2-centos7-amd64.zip
