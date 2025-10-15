@@ -1,0 +1,69 @@
+name: Build openppp2 Static Binary for CentOS 7
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout 源码
+      - name: Checkout openppp2
+        uses: actions/checkout@v4
+
+      # 2️⃣ Build inside CentOS 7 Docker
+      - name: Build openppp2 static binary in CentOS 7
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
+            # 安装依赖
+            yum groupinstall 'Development Tools' -y
+            yum install epel-release -y
+            yum install git wget bzip2 bzip2-devel lrzsz zip unzip autoconf curl cmake gcc gcc-c++ boost-devel openssl-devel libunwind libunwind-devel -y
+
+            # 获取 CPU 核心数
+            ncpu=\$(nproc)
+
+            # 构建 jemalloc 静态库
+            wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
+            tar jxvf jemalloc-5.3.0.tar.bz2
+            cd jemalloc-5.3.0
+            ./autogen.sh --with-jemalloc-prefix=je_
+            ./configure --enable-static --disable-shared
+            make -j \$ncpu
+            make install
+            cd ..
+
+            # 构建 OpenSSL 静态库
+            wget https://www.openssl.org/source/openssl-3.0.13.tar.gz
+            tar zxvf openssl-3.0.13.tar.gz
+            cd openssl-3.0.13
+            ./Configure linux-x86_64 no-shared --prefix=/usr/local/ssl
+            make -j \$ncpu
+            make install
+            cd ..
+
+            # 构建 openppp2 静态二进制
+            mkdir -p openppp2/build
+            cd openppp2/build
+            cmake .. \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=OFF \
+              -DOPENSSL_ROOT_DIR=/usr/local/ssl \
+              -DOPENSSL_USE_STATIC_LIBS=TRUE
+            make -j \$ncpu
+
+            # 打包成单个 tar.gz
+            cd ../bin
+            tar -czvf openppp2-centos7-amd64-static.tar.gz openppp2
+          "
+
+      # 3️⃣ 上传静态二进制包
+      - name: Upload static binary package
+        uses: actions/upload-artifact@v4
+        with:
+          name: openppp2-centos7-amd64-static
+          path: openppp2/bin/openppp2-centos7-amd64-static.tar.gz
