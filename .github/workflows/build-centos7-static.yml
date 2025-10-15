@@ -11,14 +11,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout 源码
-      - name: Checkout openppp2
+      # 1️⃣ Checkout workflow 文件所在仓库（用于 Docker volume）
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Build inside CentOS 7 Docker
+      # 2️⃣ Build openppp2 inside CentOS 7 Docker
       - name: Build openppp2 static binary in CentOS 7
         run: |
           docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
+            set -e
+
             # 备份原 repo 并替换为自定义 repo
             mkdir -p /root/backup-repos
             mv /etc/yum.repos.d/* /root/backup-repos/
@@ -28,7 +30,7 @@ jobs:
             yum clean all
             yum makecache
 
-            # 安装开发工具和依赖（具体包列表）
+            # 安装具体开发工具和依赖
             yum install -y \
               gcc \
               gcc-c++ \
@@ -49,11 +51,16 @@ jobs:
               boost-devel \
               openssl-devel \
               libunwind \
-              libunwind-devel
+              libunwind-devel \
+              git
 
             # 获取 CPU 核心数
             ncpu=\$(nproc)
 
+            # Clone openppp2 仓库
+            git clone https://github.com/yhvhnl/openppp2.20240704.git openppp2
+
+            # -----------------------
             # 构建 jemalloc 静态库
             wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
             tar jxvf jemalloc-5.3.0.tar.bz2
@@ -83,8 +90,10 @@ jobs:
               -DOPENSSL_USE_STATIC_LIBS=TRUE
             make -j \$ncpu
 
-            # 打包成 tar.gz
+            # 打包二进制
             cd ../bin
+            mkdir -p openppp2
+            cp ../build/openppp2 openppp2/
             tar -czvf openppp2-centos7-amd64-static.tar.gz openppp2
           "
 
