@@ -30,7 +30,7 @@ jobs:
             yum clean all
             yum makecache
 
-            # 安装基础工具和依赖
+            # 安装基础工具和依赖（不安装 boost-devel）
             yum install -y \
               gcc \
               gcc-c++ \
@@ -47,7 +47,6 @@ jobs:
               perl \
               perl-IPC-Cmd \
               perl-ExtUtils-MakeMaker \
-              boost-devel \
               openssl-devel \
               libunwind \
               libunwind-devel \
@@ -63,6 +62,16 @@ jobs:
 
             # Clone openppp2 仓库
             git clone https://github.com/yhvhnl/openppp2.20240704.git openppp2
+
+            # -----------------------
+            # 编译 Boost 1.84 源码（支持 Beast）
+            wget https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.bz2
+            tar jxvf boost_1_84_0.tar.bz2
+            cd boost_1_84_0
+            ./bootstrap.sh
+            ./b2 cxxflags=-fPIC --prefix=/usr/local
+            ./b2 install
+            cd ..
 
             # -----------------------
             # 构建 jemalloc 静态库
@@ -91,7 +100,8 @@ jobs:
               -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_SHARED_LIBS=OFF \
               -DOPENSSL_ROOT_DIR=/usr/local/ssl \
-              -DOPENSSL_USE_STATIC_LIBS=TRUE
+              -DOPENSSL_USE_STATIC_LIBS=TRUE \
+              -DBOOST_ROOT=/usr/local
             make -j \$ncpu
 
             # 打包二进制
