@@ -1,126 +1,54 @@
-name: Build openppp2 Static Binary for CentOS 7 (Boost 1.72)
+name: Build OpenPPP2 CentOS7 Static
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout 仓库
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      # 2️⃣ Build inside CentOS 7 Docker
-      - name: Build openppp2 static binary in CentOS 7
-        run: |
-          docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
-            set -e
+    - name: Run build in CentOS 7
+      run: |
+        docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
+          # 更新基础工具和依赖
+          yum install -y epel-release
+          yum install -y gcc gcc-c++ make cmake wget tar bzip2 zip unzip curl git \
+                         openssl-devel libicu-devel libunwind-devel lrzsz
 
-            # 替换 repo 为自定义源
-            mkdir -p /root/backup-repos
-            mv /etc/yum.repos.d/* /root/backup-repos/
-            curl -o /etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
-            yum clean all
-            yum makecache
+          # 下载并编译 Boost 1.66
+          wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
+          tar jxvf boost_1_66_0.tar.bz2
+          cd boost_1_66_0
+          ./bootstrap.sh
+          ./b2 cxxflags=-fPIC -j\$(nproc)
+          ./b2 install
+          cd /workspace
 
-            # 安装基础工具和依赖
-            yum install -y \
-              gcc \
-              gcc-c++ \
-              make \
-              autoconf \
-              automake \
-              libtool \
-              wget \
-              bzip2 \
-              bzip2-devel \
-              unzip \
-              zip \
-              curl \
-              perl \
-              perl-IPC-Cmd \
-              perl-ExtUtils-MakeMaker \
-              openssl-devel \
-              libunwind \
-              libunwind-devel \
-              git \
-              cmake3
+          # 创建构建目录
+          mkdir -p build && cd build
 
-            # 确保 cmake 命令可用
-            ln -sf /usr/bin/cmake3 /usr/bin/cmake
+          # 使用 CMake 构建 openppp2
+          cmake .. \
+            -DBOOST_ROOT=/workspace/boost_1_66_0 \
+            -DCMAKE_BUILD_TYPE=Release
 
-            # CPU 核心数
-            ncpu=\$(nproc)
+          make -j\$(nproc)
 
-            # Clone openppp2
-            git clone https://github.com/yhvhnl/openppp2.20240704.git openppp2
+          # 打包生成的二进制文件
+          mkdir -p bin
+          cp ./ppp/bin/ppp ./bin/
+          zip -r openppp2-centos7-amd64.zip ./bin
+        "
 
-            # -----------------------
-            # 下载并编译 Boost 1.72 只包含必要模块
-            wget -O boost_1_72_0.tar.bz2 https://sourceforge.net/projects/boost/files/boost/1.72.0/boost_1_72_0.tar.bz2/download
-            tar jxvf boost_1_72_0.tar.bz2
-            cd boost_1_72_0
-            ./bootstrap.sh
-            ./b2 cxxflags=-fPIC --prefix=/usr/local \
-                --with-system \
-                --with-thread \
-                --with-filesystem \
-                --with-regex \
-                --with-chrono \
-                --with-date_time \
-                --with-atomic \
-                stage install
-            cd ..
-
-            # -----------------------
-            # 构建 jemalloc
-            wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
-            tar jxvf jemalloc-5.3.0.tar.bz2
-            cd jemalloc-5.3.0
-            ./autogen.sh --with-jemalloc-prefix=je_
-            ./configure --enable-static --disable-shared --prefix=/usr/local
-            make -j \$ncpu
-            make install
-            cd ..
-
-            # -----------------------
-            # 构建 OpenSSL 静态库
-            wget https://www.openssl.org/source/openssl-3.0.13.tar.gz
-            tar zxvf openssl-3.0.13.tar.gz
-            cd openssl-3.0.13
-            ./Configure linux-x86_64 no-shared --prefix=/usr/local/ssl
-            make -j \$ncpu
-            make install
-            cd ..
-
-            # -----------------------
-            # 编译 openppp2 静态二进制
-            mkdir -p openppp2/build
-            cd openppp2/build
-            cmake .. \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DBUILD_SHARED_LIBS=OFF \
-              -DOPENSSL_ROOT_DIR=/usr/local/ssl \
-              -DOPENSSL_USE_STATIC_LIBS=TRUE \
-              -DBOOST_ROOT=/usr/local
-            make -j \$ncpu
-
-            # -----------------------
-            # 打包二进制
-            cd ../bin
-            mkdir -p openppp2
-            cp ../build/openppp2 openppp2/
-            tar -czvf openppp2-centos7-amd64-static.tar.gz openppp2
-          "
-
-      # 3️⃣ 上传静态二进制包
-      - name: Upload static binary package
-        uses: actions/upload-artifact@v4
-        with:
-          name: openppp2-centos7-amd64-static
-          path: openppp2/bin/openppp2-centos7-amd64-static.tar.gz
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: openppp2-centos7-amd64
+        path: openppp2-centos7-amd64.zip
