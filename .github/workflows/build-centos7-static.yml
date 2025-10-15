@@ -28,9 +28,28 @@ jobs:
             yum clean all
             yum makecache
 
-            # 安装开发工具和依赖
-            yum groupinstall 'Development Tools' -y
-            yum install -y wget gcc gcc-c++ cmake autoconf boost-devel openssl-devel bzip2 bzip2-devel unzip zip curl libunwind libunwind-devel
+            # 安装开发工具和依赖（具体包列表）
+            yum install -y \
+              gcc \
+              gcc-c++ \
+              make \
+              autoconf \
+              automake \
+              libtool \
+              cmake \
+              wget \
+              bzip2 \
+              bzip2-devel \
+              unzip \
+              zip \
+              curl \
+              perl \
+              perl-IPC-Cmd \
+              perl-ExtUtils-MakeMaker \
+              boost-devel \
+              openssl-devel \
+              libunwind \
+              libunwind-devel
 
             # 获取 CPU 核心数
             ncpu=\$(nproc)
