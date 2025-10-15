@@ -19,10 +19,16 @@ jobs:
       - name: Build openppp2 static binary in CentOS 7
         run: |
           docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
+            # 替换 yum 源为自定义 repo
+            curl -o /etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
+
+            # 清理缓存
+            yum clean all
+            yum makecache
+
             # 安装依赖
             yum groupinstall 'Development Tools' -y
-            yum install epel-release -y
-            yum install git wget bzip2 bzip2-devel lrzsz zip unzip autoconf curl cmake gcc gcc-c++ boost-devel openssl-devel libunwind libunwind-devel -y
+            yum install -y wget gcc gcc-c++ cmake autoconf boost-devel openssl-devel bzip2 bzip2-devel unzip zip curl libunwind libunwind-devel
 
             # 获取 CPU 核心数
             ncpu=\$(nproc)
