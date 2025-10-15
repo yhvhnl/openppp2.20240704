@@ -1,79 +1,76 @@
-# .github/workflows/build-centos7-static.yml
-name: Build openppp2 CentOS7 Static
+name: Build openppp2 for CentOS 7 (Static)
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NCPU: ${{ runner.os == 'Linux' && runner.arch == 'X64' && runner.job }} 
+
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up CentOS 7 environment
+    - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y debootstrap schroot
+        sudo apt-get update -y
+        sudo apt-get install -y software-properties-common wget tar bzip2 make cmake perl python3 unzip
 
-        # 创建 CentOS7 rootfs
-        sudo debootstrap --arch=amd64 centos7 /srv/chroots/centos7 http://mirror.centos.org/centos/7/os/x86_64/
-
-        # 创建 schroot 配置
-        echo "[centos7]" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
-        echo "description=CentOS 7 chroot" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
-        echo "directory=/srv/chroots/centos7" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
-        echo "users=$(whoami)" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
-        echo "root-users=$(whoami)" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
-        echo "type=directory" | sudo tee -a /etc/schroot/chroot.d/centos7.conf
-
-        # 导入你的 repo
-        sudo rm -f /srv/chroots/centos7/etc/yum.repos.d/*.repo
-        sudo wget -O /srv/chroots/centos7/etc/yum.repos.d/centos7.repo http://haoyuli.cn/public/linux/centos/repo/7/centos7.repo
-
-        # 清缓存
-        sudo schroot -c centos7 -- yum clean all
-        sudo schroot -c centos7 -- yum makecache
-
-        # 安装依赖
-        sudo schroot -c centos7 -- yum -y install wget gcc gcc-c++ make cmake git unzip bzip2 perl
-
-    - name: Build Boost 1.66
+    - name: Install GCC 4.8
       run: |
-        sudo schroot -c centos7 -- bash -c "
-          cd /workspace
-          wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
-          tar jxvf boost_1_66_0.tar.bz2
-          cd boost_1_66_0
-          ./bootstrap.sh --prefix=/usr/local
-          ./b2 install
-        "
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+        sudo apt-get update -y
+        sudo apt-get install -y gcc-4.8 g++-4.8
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
+        gcc --version
+        g++ --version
+
+    - name: Build Boost 1.66 (static)
+      run: |
+        wget https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2
+        tar jxvf boost_1_66_0.tar.bz2
+        cd boost_1_66_0
+        ./bootstrap.sh --with-libraries=system,thread,chrono,regex,filesystem,program_options,graph,atomic,date_time
+        ./b2 toolset=gcc cxxflags="-fPIC -O2" link=static threading=multi runtime-link=static stage
+        cd ..
+
+    - name: Build OpenSSL 1.1.1 (static)
+      run: |
+        wget https://www.openssl.org/source/openssl-1.1.1q.tar.gz
+        tar zxvf openssl-1.1.1q.tar.gz
+        cd openssl-1.1.1q
+        ./config no-shared --prefix=$HOME/openssl
+        make -j$(nproc)
+        make install
+        cd ..
 
     - name: Build openppp2
       run: |
-        sudo schroot -c centos7 -- bash -c "
-          cd /workspace
-          mkdir -p openppp2/build
-          cd openppp2/build
-          cmake .. -DCMAKE_BUILD_TYPE=Release
-          make -j\$(nproc)
-          mkdir -p ../bin
-          cp ppp ../bin/
-        "
+        cd openppp2
+        mkdir -p build && cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBOOST_ROOT=$GITHUB_WORKSPACE/boost_1_66_0 \
+          -DOPENSSL_ROOT_DIR=$HOME/openssl \
+          -DBUILD_SHARED_LIBS=OFF
+        make -j$(nproc)
+        cd ..
 
-    - name: Package openppp2
+    - name: Package binary
       run: |
-        cd openppp2/bin
-        zip -r openppp2-centos7-amd64.zip ppp
-      shell: bash
+        mkdir -p output
+        cp openppp2/build/ppp output/
+        cd output
+        zip -r openppp2-centos7-static.zip ppp
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: openppp2-centos7
-        path: openppp2/bin/openppp2-centos7-amd64.zip
+        name: openppp2-centos7-static
+        path: output/openppp2-centos7-static.zip
