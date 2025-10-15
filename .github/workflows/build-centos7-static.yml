@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Build openppp2 inside CentOS 7 Docker
+      # 2️⃣ Build inside CentOS 7 Docker
       - name: Build openppp2 static binary in CentOS 7
         run: |
           docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "
@@ -48,7 +48,11 @@ jobs:
               openssl-devel \
               libunwind \
               libunwind-devel \
-              git
+              git \
+              cmake3
+
+            # 确保 cmake 命令可用
+            ln -sf /usr/bin/cmake3 /usr/bin/cmake
 
             # CPU 核心数
             ncpu=\$(nproc)
@@ -57,13 +61,20 @@ jobs:
             git clone https://github.com/yhvhnl/openppp2.20240704.git openppp2
 
             # -----------------------
-            # 下载并编译 Boost 1.72 (兼容 GCC 4.8)
+            # 下载并编译 Boost 1.72 只包含必要模块
             wget -O boost_1_72_0.tar.bz2 https://sourceforge.net/projects/boost/files/boost/1.72.0/boost_1_72_0.tar.bz2/download
             tar jxvf boost_1_72_0.tar.bz2
             cd boost_1_72_0
             ./bootstrap.sh
-            ./b2 cxxflags=-fPIC --prefix=/usr/local
-            ./b2 install
+            ./b2 cxxflags=-fPIC --prefix=/usr/local \
+                --with-system \
+                --with-thread \
+                --with-filesystem \
+                --with-regex \
+                --with-chrono \
+                --with-date_time \
+                --with-atomic \
+                stage install
             cd ..
 
             # -----------------------
