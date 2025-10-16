@@ -1,17 +1,17 @@
-name: Build & Release OpenPPP2 CentOS7 Compatible (Static)
+name: Build & Release OpenPPP2 CentOS7 Compatible (Fully Static)
 
 on:
   push:
     branches: [ main ]
     tags:
-      - 'v*'        # 当 push v1.0.0 时自动发布
+      - 'v*'  # 推送版本号标签时自动发布
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04   # ✅ 改这里 — ubuntu-20.04 支持 gcc-8
+    runs-on: ubuntu-20.04   # ✅ 使用 ubuntu-20.04 环境（支持 gcc-8）
 
     steps:
       - name: Checkout repository
@@ -66,19 +66,22 @@ jobs:
           make -j$(nproc)
           sudo make install_sw
 
-      - name: Build openppp2
+      - name: Build openppp2 (fully static)
         run: |
           mkdir -p build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=/usr/local -DCMAKE_EXE_LINKER_FLAGS="-static"
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBOOST_ROOT=/usr/local \
+            -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++ -Wl,--whole-archive -lpthread -Wl,--no-whole-archive"
           make -j$(nproc)
           cd ../bin
-          tar czf openppp2-linux-amd64-static.tar.gz ppp
-          echo "ARTIFACT_PATH=$(pwd)/openppp2-linux-amd64-static.tar.gz" >> $GITHUB_ENV
+          tar czf openppp2-linux-amd64-centos7-static.tar.gz ppp
+          echo "ARTIFACT_PATH=$(pwd)/openppp2-linux-amd64-centos7-static.tar.gz" >> $GITHUB_ENV
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openppp2-linux-amd64-static
+          name: openppp2-linux-amd64-centos7-static
           path: ${{ env.ARTIFACT_PATH }}
 
   release:
@@ -90,12 +93,12 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: openppp2-linux-amd64-static
+          name: openppp2-linux-amd64-centos7-static
           path: ./release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./release/openppp2-linux-amd64-static.tar.gz
+          files: ./release/openppp2-linux-amd64-centos7-static.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
