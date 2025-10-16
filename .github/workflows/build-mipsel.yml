@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04  # 可改为 ubuntu-20.04
 
     steps:
       - name: Checkout repository
@@ -26,7 +26,8 @@ jobs:
         run: |
           mkdir -p build
           echo "Compiling openppp2 for mipsel..."
-          # 自动收集仓库中所有 cpp 文件
+
+          # 自动收集所有 cpp 文件
           CPP_FILES=$(find . -name '*.cpp')
           echo "Found CPP files:"
           echo "$CPP_FILES"
@@ -34,7 +35,20 @@ jobs:
             echo "No .cpp files found!"
             exit 1
           fi
-          mipsel-linux-gnu-g++ -static -O2 -std=c++17 $CPP_FILES -o build/ppp
+
+          # 自动收集所有包含头文件的目录
+          INCLUDE_DIRS=$(find . -type f -name '*.h' -exec dirname {} \; | sort -u)
+          INCLUDES=""
+          for dir in $INCLUDE_DIRS; do
+            INCLUDES="$INCLUDES -I$dir"
+          done
+          echo "Include directories:"
+          echo "$INCLUDES"
+
+          # 编译静态二进制
+          mipsel-linux-gnu-g++ -static -O2 -std=c++17 $INCLUDES $CPP_FILES -o build/ppp
+
+          echo "Build finished:"
           ls -lh build/
 
       - name: Upload static binary
