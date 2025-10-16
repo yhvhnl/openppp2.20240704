@@ -1,0 +1,52 @@
+name: Build OpenPPP2 for OpenWRT (mipsel_24kc)
+
+on:
+  workflow_dispatch:  # 手动触发
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential git wget python3
+
+      - name: Download OpenWRT SDK
+        run: |
+          wget https://downloads.openwrt.org/releases/22.03.5/targets/ramips/mt7621/openwrt-sdk-22.03.5-ramips-mt7621_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+          tar xf openwrt-sdk-*.tar.xz
+          mv openwrt-sdk-* openwrt-sdk
+
+      - name: Prepare OpenPPP2 package
+        run: |
+          cd openwrt-sdk
+          mkdir -p package/openppp2
+          cp -r ../* package/openppp2/ || true
+          echo "src-git packages https://github.com/openwrt/packages.git;openwrt-22.03" > feeds.conf.default
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+
+      - name: Enable static linking (optional)
+        run: |
+          sed -i '/TARGET_LDFLAGS/s/$/ -static/' openwrt-sdk/package/openppp2/Makefile || true
+
+      - name: Compile OpenPPP2
+        run: |
+          cd openwrt-sdk
+          make package/openppp2/compile V=s || true
+          find bin/ -name "*.ipk"
+
+      - name: Upload .ipk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openppp2-mipsel_24kc
+          path: openwrt-sdk/bin/packages/mipsel_24kc/**/*.ipk
