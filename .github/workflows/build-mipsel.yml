@@ -1,0 +1,40 @@
+name: Build OpenPPP2 for MIPSEL (OpenWRT)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04   # 也可以改成 ubuntu-20.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y g++ make git
+
+      - name: Install MIPSEL cross compiler
+        run: |
+          sudo apt install -y g++-mipsel-linux-gnu
+
+      - name: Build OpenPPP2 for mipsel
+        run: |
+          mkdir -p build
+          echo "Compiling openppp2 for mipsel..."
+          # 自动收集所有 cpp 文件
+          CPP_FILES=$(find src -name '*.cpp')
+          echo "Found CPP files:"
+          echo $CPP_FILES
+          mipsel-linux-gnu-g++ -static -O2 -std=c++17 $CPP_FILES -o build/ppp
+          ls -lh build/
+
+      - name: Upload static binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ppp-mipsel-static
+          path: build/ppp
