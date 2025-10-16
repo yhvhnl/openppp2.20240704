@@ -1,70 +1,83 @@
-# .github/workflows/build-centos7-static.yml
-name: Build PPP PRIVATE NETWORK 2 - Static (Ubuntu 18.04)
+name: Build OpenPPP2 CentOS7 Compatible (Static)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
-      BOOST_VERSION: 1.66.0
-      OPENSSL_VERSION: 1.1.1u
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install build tools and dependencies
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y build-essential gcc-4.8 g++-4.8 cmake perl wget bzip2 zip unzip git libssl-dev zlib1g-dev
+      - name: Install basic dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential wget curl git cmake autoconf automake libtool pkg-config python3
 
-    - name: Set GCC 4.8 as default
-      run: |
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
-        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
-        gcc --version
-        g++ --version
+      - name: Set up devtoolset-like GCC 4.8 environment
+        run: |
+          # 模拟 CentOS7 的 GCC ABI 兼容层
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-7 g++-7
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 70
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 70
+          gcc --version
+          g++ --version
 
-    - name: Download and build Boost 1.66
-      run: |
-        wget https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/boost_1_66_0.tar.bz2
-        tar jxvf boost_1_66_0.tar.bz2
-        cd boost_1_66_0
-        ./bootstrap.sh
-        ./b2 cxxflags=-fPIC link=static threading=multi runtime-link=static install
-        cd ..
+      - name: Install CMake 3.27+
+        run: |
+          wget https://cmake.org/files/v3.27/cmake-3.27.8-linux-x86_64.sh
+          sudo bash cmake-3.27.8-linux-x86_64.sh --skip-license --prefix=/usr/local
+          cmake --version
 
-    - name: Download and build OpenSSL 1.1.1u
-      run: |
-        wget https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz
-        tar zxvf openssl-${OPENSSL_VERSION}.tar.gz
-        cd openssl-${OPENSSL_VERSION}
-        ./config no-shared --prefix=/usr/local/ssl
-        make -j$(nproc)
-        sudo make install
-        cd ..
+      - name: Build Boost 1.66
+        run: |
+          wget -q https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2 -O boost_1_66_0.tar.bz2 || \
+          wget -q https://sourceforge.net/projects/boost/files/boost/1.66.0/boost_1_66_0.tar.bz2/download -O boost_1_66_0.tar.bz2
+          tar -xjf boost_1_66_0.tar.bz2
+          cd boost_1_66_0
+          ./bootstrap.sh
+          ./b2 cxxflags="-fPIC -static" link=static runtime-link=static -j$(nproc)
+          sudo cp -r boost /usr/local/include/
+          sudo cp -r stage/lib/* /usr/local/lib/
 
-    - name: Build openppp2
-      run: |
-        mkdir -p openppp2/build
-        cd openppp2/build
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DBOOST_ROOT=/usr/local \
-          -DOPENSSL_ROOT_DIR=/usr/local/ssl \
-          -DCMAKE_CXX_FLAGS="-static"
-        make -j$(nproc)
+      - name: Build jemalloc
+        run: |
+          wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
+          tar -xjf jemalloc-5.3.0.tar.bz2
+          cd jemalloc-5.3.0
+          ./autogen.sh --with-jemalloc-prefix=je_
+          make -j$(nproc)
+          sudo make install
 
-    - name: Archive artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: openppp2-static
-        path: openppp2/build/ppp   # 根据你的可执行文件路径调整
+      - name: Build OpenSSL 1.1.1w (CentOS7-compatible)
+        run: |
+          wget https://www.openssl.org/source/openssl-1.1.1w.tar.gz
+          tar -xzf openssl-1.1.1w.tar.gz
+          cd openssl-1.1.1w
+          ./config no-shared no-zlib
+          make -j$(nproc)
+          sudo make install_sw
+
+      - name: Build openppp2
+        run: |
+          cd openppp2
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=/usr/local -DCMAKE_EXE_LINKER_FLAGS="-static"
+          make -j$(nproc)
+          cd ../bin
+          tar czf openppp2-linux-amd64-static.tar.gz ppp
+          echo "ARTIFACT_PATH=$(pwd)/openppp2-linux-amd64-static.tar.gz" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openppp2-linux-amd64-static
+          path: ${{ env.ARTIFACT_PATH }}
