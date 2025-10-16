@@ -1,17 +1,13 @@
-name: Build & Release OpenPPP2 CentOS7 Compatible (Fully Static)
+name: Build & Auto Release OpenPPP2 CentOS7 Static
 
 on:
   push:
-    branches: [ main ]
-    tags:
-      - 'v*'  # 推送版本号标签时自动发布
-  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04   # ✅ 使用 ubuntu-20.04 环境（支持 gcc-8）
+    runs-on: ubuntu-20.04
 
     steps:
       - name: Checkout repository
@@ -87,7 +83,6 @@ jobs:
   release:
     runs-on: ubuntu-20.04
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: Download artifact
@@ -96,9 +91,32 @@ jobs:
           name: openppp2-linux-amd64-centos7-static
           path: ./release
 
+      - name: Generate automatic version tag
+        id: version
+        run: |
+          DATE_TAG=$(date +'%Y.%m.%d')
+          EXISTING=$(git tag -l "v${DATE_TAG}*")
+          if [ -z "$EXISTING" ]; then
+            TAG="v${DATE_TAG}.1"
+          else
+            NUM=$(echo "$EXISTING" | wc -l)
+            TAG="v${DATE_TAG}.$((NUM+1))"
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "Generated version tag: $TAG"
+
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ env.TAG }}
+          git push origin ${{ env.TAG }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: "OpenPPP2 ${{ env.TAG }}"
+          tag_name: ${{ env.TAG }}
           files: ./release/openppp2-linux-amd64-centos7-static.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
