@@ -1,8 +1,10 @@
-name: Build OpenPPP2 CentOS7 Compatible (Static)
+name: Build & Release OpenPPP2 CentOS7 Compatible (Static)
 
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'        # 当你 push tag v1.0.0 这样的版本号时，会自动触发发布
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -15,19 +17,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install basic dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y build-essential wget curl git cmake autoconf automake libtool pkg-config python3
+          sudo apt-get install -y build-essential wget curl git cmake autoconf automake libtool pkg-config python3 software-properties-common
 
-      - name: Set up devtoolset-like GCC 4.8 environment
+      - name: Install GCC 8 (CentOS7-compatible ABI)
         run: |
-          # 模拟 CentOS7 的 GCC ABI 兼容层
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
           sudo apt-get update -y
-          sudo apt-get install -y gcc-7 g++-7
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 70
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 70
+          sudo apt-get install -y gcc-8 g++-8
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 80
           gcc --version
           g++ --version
 
@@ -39,7 +40,6 @@ jobs:
 
       - name: Build Boost 1.66
         run: |
-          wget -q https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.bz2 -O boost_1_66_0.tar.bz2 || \
           wget -q https://sourceforge.net/projects/boost/files/boost/1.66.0/boost_1_66_0.tar.bz2/download -O boost_1_66_0.tar.bz2
           tar -xjf boost_1_66_0.tar.bz2
           cd boost_1_66_0
@@ -57,7 +57,7 @@ jobs:
           make -j$(nproc)
           sudo make install
 
-      - name: Build OpenSSL 1.1.1w (CentOS7-compatible)
+      - name: Build OpenSSL 1.1.1w
         run: |
           wget https://www.openssl.org/source/openssl-1.1.1w.tar.gz
           tar -xzf openssl-1.1.1w.tar.gz
@@ -68,7 +68,6 @@ jobs:
 
       - name: Build openppp2
         run: |
-          cd openppp2
           mkdir -p build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=/usr/local -DCMAKE_EXE_LINKER_FLAGS="-static"
           make -j$(nproc)
@@ -76,8 +75,27 @@ jobs:
           tar czf openppp2-linux-amd64-static.tar.gz ppp
           echo "ARTIFACT_PATH=$(pwd)/openppp2-linux-amd64-static.tar.gz" >> $GITHUB_ENV
 
-      - name: Upload artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: openppp2-linux-amd64-static
           path: ${{ env.ARTIFACT_PATH }}
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openppp2-linux-amd64-static
+          path: ./release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./release/openppp2-linux-amd64-static.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
