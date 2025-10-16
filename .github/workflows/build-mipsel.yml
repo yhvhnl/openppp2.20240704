@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # 可改为 ubuntu-20.04
+    runs-on: ubuntu-20.04  # 可以改为 ubuntu-20.04
 
     steps:
       - name: Checkout repository
@@ -42,6 +42,10 @@ jobs:
           for dir in $INCLUDE_DIRS; do
             INCLUDES="$INCLUDES -I$dir"
           done
+          
+          # 加入 lwip 头文件路径
+          INCLUDES="$INCLUDES -I./common/lwip/include"
+
           echo "Include directories:"
           echo "$INCLUDES"
 
