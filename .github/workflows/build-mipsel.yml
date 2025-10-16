@@ -16,15 +16,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y g++ make git
+          sudo apt install -y g++ make git libssl-dev
 
       - name: Install MIPSEL cross compiler
         run: |
           sudo apt install -y g++-mipsel-linux-gnu
-
-      - name: Install Boost libraries
-        run: |
-          sudo apt install -y libboost-all-dev
 
       - name: Build OpenPPP2 for mipsel
         run: |
@@ -52,6 +48,9 @@ jobs:
           
           # 加入 Boost 头文件路径（假设 Boost 放在 ./third_party/boost 目录）
           INCLUDES="$INCLUDES -I./third_party/boost"
+          
+          # 加入 OpenSSL 头文件路径（如果 OpenSSL 安装在系统的标准路径下，一般不需要额外添加）
+          INCLUDES="$INCLUDES -I/usr/include/openssl"
           
           echo "Include directories:"
           echo "$INCLUDES"
